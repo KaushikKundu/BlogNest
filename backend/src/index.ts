@@ -1,27 +1,34 @@
-import { Hono } from 'hono'
-import { signup } from './controllers/signup'
-
+import { Hono } from "hono";
+import { verify } from "hono/jwt";
+import { blogRouter } from "./routes/blog";
+import { userRouter } from "./routes/user";
 const app = new Hono<{
-  Bindings:{
-    DATABASE_URL: string,
-    JWT_SECRET: string
+  Bindings: {
+    DATABASE_URL: string;
+    JWT_SECRET: string;
+  },
+  Variables : {
+    userId: any
   }
-}>()
+}>().basePath('/api/v1');
 
-app.post('/api/v1/user/signup', signup)
-app.post('/api/v1/user/signin',signin)
-app.post('/api/v1/blog', (c) => {
-  return c.text('hello')
-})
-app.put('/api/v1/blog', (c) => {
-  return c.text('hello')
-})
-app.get('/api/v1/blog/:id', (c) => {
-  return c.text('hello')
-})
-app.get('/api/v1/blog/bulk', (c) => {
-  return c.text('hello')
-})
+app.route('/blog',blogRouter);
+app.route('/user',userRouter);
 
+app.use('/blog*', async (c,next) => {
+  const header = c.req.header('Authorization');
+  if (!header) {
+    return c.json({ error: 'unauthorized' }, 401);
+  }
 
-export default app
+  const token = header.split(' ')[1];
+  const decoded = await verify(token, c.env.JWT_SECRET);
+
+  if (!decoded.success) {
+    return c.json({ error: 'unauthorized' }, 401);
+  }
+  c.set('userId', decoded.id);
+  await next();
+});
+
+export default app;
